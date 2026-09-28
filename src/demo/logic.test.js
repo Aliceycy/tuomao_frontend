@@ -1,7 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { newBoard, matches, hasMove, adjacent, swapAndResolve, score, redeemWork } from './game.js'
-import { makeInitialState } from './data.js'
+import { makeInitialState, products } from './data.js'
+import { CARE_DEMO_DURATION, PREPARATION_ITEMS, preparationScope, preparationStatus, startCareDemo } from './preparation.js'
 import { checkIn, redeemGift, stockRemaining, cartTotal } from './commerce.js'
 import { finishGame } from './game.js'
 import { FELT_STYLES, randomFeltStyle, workStyle } from './felt.js'
@@ -131,4 +132,24 @@ test('care saves after selecting both responses without any aftercare checklist'
   assert.equal(canSaveCare(flow), true)
   flow.saved = true
   assert.equal(canSaveCare(flow), false)
+})
+
+test('every product and body part can start the demo when all three preparations are complete', () => {
+  for (const product of products) for (const part of ['手臂', '腿部', '腋下', '其他部位']) {
+    const flow = makeInitialState().flow
+    flow.product = product.id
+    flow.answers.part = part
+    const scope = preparationScope(flow)
+    Object.assign(flow, { checks:[...PREPARATION_ITEMS], instructionsRead:{ scope, duration:5000 }, skinPhoto:{ scope, dataUrl:'mock-photo', confirmedAt:1000 } })
+    assert.equal(preparationStatus(flow).ready, true, `${product.name} / ${part}`)
+    const started = startCareDemo(flow, 2000)
+    assert.equal(started.step, 'timer')
+    assert.equal(started.startedAt, 2000)
+    assert.equal(CARE_DEMO_DURATION, 20)
+    assert.equal(startCareDemo(started, 3000), started, 're-entry must not reset the timer')
+    for (const field of ['checks', 'instructionsRead', 'skinPhoto']) {
+      const incomplete = { ...flow, [field]:field === 'checks' ? [] : null }
+      assert.equal(startCareDemo(incomplete, 2000), incomplete, `missing ${field} must still block the demo`)
+    }
+  }
 })

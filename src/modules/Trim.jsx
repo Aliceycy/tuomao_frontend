@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useDemo } from '../demo/context'
 import { eventTime, newFlow, products, uid } from '../demo/data'
-import { canSaveCare, EFFECTS, FEELINGS, PREPARATION_ITEMS, preparationStatus } from '../demo/preparation'
+import { canSaveCare, CARE_DEMO_DURATION, EFFECTS, FEELINGS, PREPARATION_ITEMS, preparationStatus, startCareDemo } from '../demo/preparation'
 import { ProductInstructions, SkinCapture } from './TrimPreparation'
 import { Button, Card, Empty, Field, Note, Page, Row, DemoStates, StateView } from './UI'
 
@@ -28,7 +28,7 @@ export default function Trim({ path }) {
   const go = step => { patch({ step }); navigate(`trim/${step}`) }
   const product = products.find(p => p.id === flow.product) || products[0]
   const preparation = preparationStatus(flow)
-  const remaining = Math.max(0, Math.ceil(((flow.startedAt || now) + (product.duration || 0) * 1000 - now) / 1000))
+  const remaining = Math.max(0, Math.ceil(((flow.startedAt || now) + CARE_DEMO_DURATION * 1000 - now) / 1000))
   useEffect(() => {
     if (page !== 'timer') return
     const id = setInterval(() => setNow(Date.now()), 250)
@@ -36,15 +36,15 @@ export default function Trim({ path }) {
   }, [page])
   useEffect(() => {
     if (page === 'timer' && flow.startedAt && !flow.endedAt && remaining === 0) {
-      update(s => ({ ...s, flow:{ ...s.flow, endedAt:s.flow.startedAt + (product.duration || 0) * 1000, step:'care' } }))
+      update(s => ({ ...s, flow:{ ...s.flow, endedAt:s.flow.startedAt + CARE_DEMO_DURATION * 1000, step:'care' } }))
       navigate('trim/care')
     }
-  }, [page, flow.startedAt, flow.endedAt, remaining, product.duration, update, navigate])
+  }, [page, flow.startedAt, flow.endedAt, remaining, update, navigate])
   const startTimer = () => {
     if (flow.startedAt && !flow.endedAt) { navigate('trim/timer'); return }
-    if (!product.duration || !product.parts.includes(flow.answers.part) || !preparation.ready) return
+    if (!preparation.ready) return
     const startedAt = eventTime()
-    update(s => s.flow.startedAt ? s : ({ ...s, flow:{ ...s.flow, startedAt, step:'timer' } }))
+    update(s => ({ ...s, flow:startCareDemo(s.flow, startedAt) }))
     setNow(startedAt)
     navigate('trim/timer')
   }
@@ -88,7 +88,6 @@ export default function Trim({ path }) {
   if (page === 'instructions') return <ProductInstructions key={`${flow.id}:${flow.product}:${flow.answers.part}`} product={product} flow={flow} />
   if (page === 'skin') return <SkinCapture key={`${flow.id}:${flow.product}:${flow.answers.part}`} flow={flow} />
   if (page === 'prepare') {
-    const available = product.duration && product.parts.includes(flow.answers.part)
     return <Page title="先做好小小准备。" intro={`${product.name} · ${flow.answers.part}`}>
       <Card color="yellow"><h2>准备清单</h2><p>读一读产品说明，记录此刻的肌肤状态，再备好清洗与护理用品。</p></Card>
       <div className="preparation-list">
@@ -102,8 +101,7 @@ export default function Trim({ path }) {
         </button>
         <label className="checklist-row preparation-supplies"><input type="checkbox" checked={preparation.supplies} onChange={event => patch({ checks:event.target.checked ? [...new Set([...flow.checks, PREPARATION_ITEMS[2]])] : flow.checks.filter(item => item !== PREPARATION_ITEMS[2]) })} /><span>{PREPARATION_ITEMS[2]}</span></label>
       </div>
-      {!available && <Note>所选型号或部位缺少演示计时资料，请重新选择。</Note>}
-      <Button disabled={!available || !preparation.ready} onClick={() => go('tutorial')}>准备好了，查看步骤</Button>
+      <Button disabled={!preparation.ready} onClick={() => go('tutorial')}>准备好了，查看步骤</Button>
       <Row title="查一查洗护成分" icon="03-ingredients.png" onClick={() => { setReturnTo('prepare'); navigate('trim/ingredients') }} />
       <Button secondary onClick={() => navigate('trim/products')}>重新选择产品和部位</Button>
     </Page>
@@ -113,7 +111,7 @@ export default function Trim({ path }) {
     if (!flow.startedAt || flow.saved) return <Page title="还没有进行中的计时。"><Button onClick={() => navigate('trim')}>回到修剪助手</Button></Page>
     return <Page title="这一刻，陪着你。" intro={`${product.name} · ${flow.answers.part}`}>
       <div className="demo-illustration-placeholder" role="img" aria-label="缺少演示提示插图"><span>缺少演示提示插图</span></div>
-      <div className="care-countdown"><span className="countdown-number" aria-label={`剩余 ${remaining} 秒`}>{String(Math.floor(remaining / 60)).padStart(2, '0')}:{String(remaining % 60).padStart(2, '0')}</span><progress aria-label="演示计时进度" value={(product.duration || 20) - remaining} max={product.duration || 20} /></div>
+      <div className="care-countdown"><span className="countdown-number" aria-label={`剩余 ${remaining} 秒`}>{String(Math.floor(remaining / 60)).padStart(2, '0')}:{String(remaining % 60).padStart(2, '0')}</span><progress aria-label="演示计时进度" value={CARE_DEMO_DURATION - remaining} max={CARE_DEMO_DURATION} /></div>
       <Note>计时按实际经过时间计算，切到后台也不会暂停。</Note>
       <Button onClick={() => finish(false)}>提前结束，进入护理</Button>
       <Button secondary onClick={() => finish(true)}>感觉不适，结束本次流程</Button>
